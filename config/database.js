@@ -10,6 +10,6 @@ const koneksi = mysql.createConnection({
 // koneksi database
 koneksi.connect((err) => {
    if (err) throw err;
-   console.log('MySQL Connected...');
+   console.log('Berhasil !!!');
 });
 module.exports = koneksi;

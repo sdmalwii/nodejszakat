@@ -37,7 +37,6 @@ var upload = multer({
 // create data / insert data
 app.post('/api/mahasiswa',upload.single('image'),(req, res) => {
 
-
     const data = { ...req.body };
      const nim = req.body.nim;
     const nama = req.body.nama;
