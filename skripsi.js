@@ -441,5 +441,7 @@ app.delete('/api/tbl_login/:Email', (req, res) => {
     });
 });
 
+const authRoutes = require("./routes/auth");
+app.use("/api", authRoutes);
 // buat server nya
 app.listen(PORT, () => console.log(`Server running at port: ${PORT}`));
