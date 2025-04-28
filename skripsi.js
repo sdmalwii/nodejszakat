@@ -34,53 +34,52 @@ var upload = multer({
 }); 
 
 // tbl_pencatatan
-// create data / insert data
-app.post('/api/tbl_pencatatan',upload.single('image'),(req, res) => {
-
-    const data = { ...req.body };
-    const Id_Pencatatan  = req.body.Id_Pencatatan ;
-    const Id_Muzaki = req.body.Id_Muzaki;
-    const Nama = req.body.Nama;
-    const Jenis_Kelamin = req.body.Jenis_Kelamin;
-    const Nama_Ayah = req.body.Nama_Ayah;
-    const Jumlah_Beras = req.body.Jumlah_Beras;
-    const Tanggal_Catat = req.body.Tanggal_Catat;
-
-
-    if (!req.file) {
-        console.log("No file upload");
-        const querySql = 'INSERT INTO tbl_pencatatan (Id_Pencatatan,Id_Muzaki,Nama,Jenis_Kelamin,Nama_Ayah,Jumlah_Beras,Tanggal_Catat) values (?,?,?,?,?,?,?);';
-         
-        // jalankan query
-        koneksi.query(querySql,[ Id_Pencatatan,Id_Muzaki,Nama,Jenis_Kelamin,Nama_Ayah,Jumlah_Beras,Tanggal_Catat], (err, rows, field) => {
-            // error handling
-            if (err) {
-                return res.status(500).json({ message: 'Gagal insert data!', error: err });
-            }
-       
-            // jika request berhasil
-            res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-        });
-    } else {
-        console.log(req.file.filename)
-        var imgsrc = 'http://localhost:5000/images/' + req.file.filename;
-        const foto =   imgsrc;
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySql = 'INSERT INTO tbl_pencatatan (Id_Pencatatan,Id_Muzaki,Nama,Jenis_Kelamin,Nama_Ayah,Jumlah_Beras,Tanggal_Catat) values (?,?,?,?,?,?,?);';
- 
-// jalankan query
-koneksi.query(querySql,[Id_Pencatatan,Id_Muzaki,Nama,Jenis_Kelamin,Nama_Ayah,Jumlah_Beras,Tanggal_Catat], (err, rows, field) => {
-    // error handling
-    if (err) {
-        return res.status(500).json({ message: 'Gagal insert data!', error: err });
+app.post('/api/tbl_pencatatan', (req, res) => {
+    const { 
+      Id_Pencatatan,
+      Id_Muzaki,
+      Nama,
+      Jenis_Kelamin,
+      Nama_Ayah,
+      Jumlah_Beras,
+      Tanggal_Catat 
+    } = req.body;
+  
+    if (!Id_Pencatatan || !Nama || !Jumlah_Beras) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Data tidak lengkap' 
+      });
     }
-
-    // jika request berhasil
-    res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-});
-}
-});
+  
+    const querySql = 'INSERT INTO tbl_pencatatan SET ?';
+    const data = {
+      Id_Pencatatan,
+      Id_Muzaki,
+      Nama,
+      Jenis_Kelamin,
+      Nama_Ayah,
+      Jumlah_Beras,
+      Tanggal_Catat: new Date(Tanggal_Catat).toISOString().slice(0, 19).replace('T', ' ')
+    };
+  
+    koneksi.query(querySql, data, (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Gagal insert data',
+          error: err.message 
+        });
+      }
+      
+      res.status(201).json({ 
+        success: true, 
+        message: 'Berhasil insert data',
+        insertedId: results.insertId 
+      });
+    });
+  });
 
 // read data / get data
 app.get('/api/tbl_pencatatan', (req, res) => {
@@ -443,5 +442,6 @@ app.delete('/api/tbl_login/:Email', (req, res) => {
 
 const authRoutes = require("./routes/auth");
 app.use("/api", authRoutes);
+
 // buat server nya
 app.listen(PORT, () => console.log(`Server running at port: ${PORT}`));
