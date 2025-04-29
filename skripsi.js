@@ -1,447 +1,178 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const koneksi = require('./config/database');
 const app = express();
+const bodyParser = require('body-parser');
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+const koneksi = require('./config/database');
+const authRoutes = require("./routes/auth");
+
 const PORT = process.env.PORT || 5000;
 
-const multer = require('multer')
-const path = require('path')
-
-var cors = require('cors');
-
-// set body parser
+// Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cors({
-    origin: '*'
-}));
+app.use(cors({ origin: '*' }));
+app.use(express.static("./public"));
 
-// script upload
+// Multer config
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, './public/images/'),
+  filename: (req, file, cb) => cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname))
+});
+const upload = multer({ storage });
 
-app.use(express.static("./public"))
- //! Use of Multer
-var storage = multer.diskStorage({
-    destination: (req, file, callBack) => {
-        callBack(null, './public/images/')     // './public/images/' directory name where save the file
-    },
-    filename: (req, file, callBack) => {
-        callBack(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname))
-    }
-})
- 
-var upload = multer({
-    storage: storage
-}); 
+// API Routes
 
-// tbl_pencatatan
+// ---------- TBL_PENCATATAN ---------- //
 app.post('/api/tbl_pencatatan', (req, res) => {
-    const { 
-      Id_Pencatatan,
-      Id_Muzaki,
-      Nama,
-      Jenis_Kelamin,
-      Nama_Ayah,
-      Jumlah_Beras,
-      Tanggal_Catat 
-    } = req.body;
-  
-    if (!Id_Pencatatan || !Nama || !Jumlah_Beras) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Data tidak lengkap' 
-      });
-    }
-  
-    const querySql = 'INSERT INTO tbl_pencatatan SET ?';
-    const data = {
-      Id_Pencatatan,
-      Id_Muzaki,
-      Nama,
-      Jenis_Kelamin,
-      Nama_Ayah,
-      Jumlah_Beras,
-      Tanggal_Catat: new Date(Tanggal_Catat).toISOString().slice(0, 19).replace('T', ' ')
-    };
-  
-    koneksi.query(querySql, data, (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Gagal insert data',
-          error: err.message 
-        });
-      }
-      
-      res.status(201).json({ 
-        success: true, 
-        message: 'Berhasil insert data',
-        insertedId: results.insertId 
-      });
+  const data = req.body;
+  data.Tanggal_Catat = new Date(data.Tanggal_Catat).toISOString().slice(0, 19).replace('T', ' ');
+
+  koneksi.query('INSERT INTO tbl_pencatatan SET ?', data, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.status(201).json({ success: true, message: 'Data berhasil ditambahkan', insertedId: result.insertId });
+  });
+});
+
+app.get('/api/tbl_pencatatan', (req, res) => {
+  koneksi.query('SELECT * FROM tbl_pencatatan', (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.status(200).json({ success: true, data: rows });
+  });
+});
+
+app.put('/api/tbl_pencatatan/:Id_Pencatatan', (req, res) => {
+  const { Id_Pencatatan } = req.params;
+  const data = { ...req.body };
+  data.Tanggal_Catat = new Date(data.Tanggal_Catat).toISOString().slice(0, 19).replace('T', ' ');
+
+  koneksi.query('SELECT * FROM tbl_pencatatan WHERE Id_Pencatatan = ?', [Id_Pencatatan], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+
+    koneksi.query('UPDATE tbl_pencatatan SET ? WHERE Id_Pencatatan = ?', [data, Id_Pencatatan], err2 => {
+      if (err2) return res.status(500).json({ success: false, message: err2.message });
+      res.status(200).json({ success: true, message: 'Data berhasil diupdate' });
     });
   });
-
-// read data / get data
-app.get('/api/tbl_pencatatan', (req, res) => {
-    // buat query sql
-    const querySql = 'SELECT * FROM tbl_pencatatan';
-
-    // jalankan query
-    koneksi.query(querySql, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika request berhasil
-        res.status(200).json({ success: true, data: rows });
-    });
 });
 
+app.delete('/api/tbl_pencatatan/:Id_Pencatatan', (req, res) => {
+  const { Id_Pencatatan } = req.params;
 
-// update data
-app.put('/api/tbl_pencatatan/:Id_Muzaki', (req, res) => {
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySearch = 'SELECT * FROM tbl_pencatatan WHERE Id_Muzaki = ?';
-    const Id_Pencatatan  = req.body.Id_Pencatatan ;
-    const Id_Muzaki = req.body.Id_Muzaki;
-    const Nama = req.body.Nama;
-    const Jenis_Kelamin = req.body.Jenis_Kelamin;
-    const Nama_Ayah = req.body.Nama_Ayah;
-    const Jumlah_Beras = req.body.Jumlah_Beras;
-    const Tanggal_Catat = req.body.Tanggal_Catat;
+  koneksi.query('SELECT * FROM tbl_pencatatan WHERE Id_Pencatatan = ?', [Id_Pencatatan], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
 
-
-    const queryUpdate = 'UPDATE tbl_pencatatan SET Id_Pencatatan=?,Nama=?,Jenis_Kelamin=?,Nama_Ayah=?,Jumlah_Beras=?,Tanggal_Catat=? WHERE Id_Muzaki = ?';
-
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Id_Muzaki, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query update
-            koneksi.query(queryUpdate, [Id_Pencatatan,Nama,Jenis_Kelamin,Nama_Ayah,Jumlah_Beras,Tanggal_Catat, req.params.Id_Muzaki], (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika update berhasil
-                res.status(200).json({ success: true, message: 'Berhasil update data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
+    koneksi.query('DELETE FROM tbl_pencatatan WHERE Id_Pencatatan = ?', [Id_Pencatatan], err2 => {
+      if (err2) return res.status(500).json({ success: false, message: err2.message });
+      res.status(200).json({ success: true, message: 'Data berhasil dihapus' });
     });
+  });
 });
 
-// delete data
-app.delete('/api/tbl_pencatatan/:Id_Muzaki', (req, res) => {
-    // buat query sql untuk mencari data dan hapus
-    const querySearch = 'SELECT * FROM tbl_pencatatan WHERE Id_Muzaki = ?';
-    const queryDelete = 'DELETE FROM tbl_pencatatan WHERE Id_Muzaki = ?';
+// ---------- TBL_PENERIMAAN ---------- //
+app.post('/api/tbl_penerimaan', upload.single('image'), (req, res) => {
+  const { Id_Penerima, Id_Mustahik, Nama, Alamat, Jenis_Kelamin, Golongan, Usia, Jumlah_Beras, Tanggal_Terima } = req.body;
+  const foto = req.file ? `http://localhost:5000/images/${req.file.filename}` : null;
+  const query = 'INSERT INTO tbl_penerimaan (Id_Penerima, Id_Mustahik, Nama, Alamat, Jenis_Kelamin, Golongan, Usia, Jumlah_Beras, Tanggal_Terima) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Id_Muzaki, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query delete
-            koneksi.query(queryDelete, req.params.Id_Muzaki, (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika delete berhasil
-                res.status(200).json({ success: true, message: 'Berhasil hapus data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
-    });
-});
-
-// tbl_penerimaan
-// create data / insert data
-app.post('/api/tbl_penerimaan',upload.single('image'),(req, res) => {
-
-    const data = { ...req.body };
-    const Id_Penerima   = req.body.Id_Penerima;
-    const Id_Mustahik = req.body.Id_Mustahik;
-    const Nama = req.body.Nama;
-    const Alamat = req.body.Alamat;
-    const Jenis_Kelamin = req.body.Jenis_Kelamin;
-    const Golongan = req.body.Golongan;
-    const Usia = req.body.Usia;
-    const Jumlah_Beras = req.body.Jumlah_Beras;
-    const Tanggal_Terima = req.body.Tanggal_Terima;
-
-    if (!req.file) {
-        console.log("No file upload");
-        const querySql = 'INSERT INTO tbl_penerimaan (Id_Penerima ,Id_Mustahik,Nama,Alamat,Jenis_Kelamin,Golongan,Usia,Jumlah_Beras,Tanggal_Terima) values (?,?,?,?,?,?,?,?,?);';
-         
-        // jalankan query
-        koneksi.query(querySql,[ Id_Penerima ,Id_Mustahik,Nama,Alamat,Jenis_Kelamin,Golongan,Usia,Jumlah_Beras,Tanggal_Terima], (err, rows, field) => {
-            // error handling
-            if (err) {
-                return res.status(500).json({ message: 'Gagal insert data!', error: err });
-            }
-       
-            // jika request berhasil
-            res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-        });
-    } else {
-        console.log(req.file.filename)
-        var imgsrc = 'http://localhost:5000/images/' + req.file.filename;
-        const foto =   imgsrc;
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySql = 'INSERT INTO tbl_penerimaan (Id_Penerima ,Id_Mustahik,Nama,Alamat,Jenis_Kelamin,Golongan,Usia,Jumlah_Beras,Tanggal_Terima) values (?,?,?,?,?,?,?,?,?);';
- 
-// jalankan query
-koneksi.query(querySql,[ Id_Penerima ,Id_Mustahik,Nama,Alamat,Jenis_Kelamin,Golongan,Usia,Jumlah_Beras,Tanggal_Terima], (err, rows, field) => {
-    // error handling
-    if (err) {
-        return res.status(500).json({ message: 'Gagal insert data!', error: err });
-    }
-
-    // jika request berhasil
+  koneksi.query(query, [Id_Penerima, Id_Mustahik, Nama, Alamat, Jenis_Kelamin, Golongan, Usia, Jumlah_Beras, Tanggal_Terima], (err) => {
+    if (err) return res.status(500).json({ message: 'Gagal insert data!', error: err });
     res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-});
-}
+  });
 });
 
-// read data / get data
 app.get('/api/tbl_penerimaan', (req, res) => {
-    // buat query sql
-    const querySql = 'SELECT * FROM tbl_penerimaan';
-
-    // jalankan query
-    koneksi.query(querySql, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika request berhasil
-        res.status(200).json({ success: true, data: rows });
-    });
+  koneksi.query('SELECT * FROM tbl_penerimaan', (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    res.status(200).json({ success: true, data: rows });
+  });
 });
 
-// update data
 app.put('/api/tbl_penerimaan/:Id_Mustahik', (req, res) => {
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySearch = 'SELECT * FROM tbl_penerimaan WHERE Id_Mustahik = ?';
-    const Id_Penerima   = req.body.Id_Penerima;
-    const Id_Mustahik = req.body.Id_Mustahik;
-    const Nama = req.body.Nama;
-    const Alamat = req.body.Alamat;
-    const Jenis_Kelamin = req.body.Jenis_Kelamin;
-    const Golongan = req.body.Golongan;
-    const Usia = req.body.Usia;
-    const Jumlah_Beras = req.body.Jumlah_Beras;
-    const Tanggal_Terima = req.body.Tanggal_Terima;
+  const { Id_Penerima, Nama, Alamat, Jenis_Kelamin, Golongan, Usia, Jumlah_Beras, Tanggal_Terima } = req.body;
+  const querySearch = 'SELECT * FROM tbl_penerimaan WHERE Id_Mustahik = ?';
+  const queryUpdate = 'UPDATE tbl_penerimaan SET Id_Penerima=?, Nama=?, Alamat=?, Jenis_Kelamin=?, Golongan=?, Usia=?, Jumlah_Beras=?, Tanggal_Terima=? WHERE Id_Mustahik=?';
 
+  koneksi.query(querySearch, [req.params.Id_Mustahik], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    if (!rows.length) return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
 
-    const queryUpdate = 'UPDATE tbl_penerimaan SET Id_Penerima=?,Nama=?, Alamat=?,Jenis_Kelamin=?,Golongan=?,Usia=?,Jumlah_Beras=?,Tanggal_Terima=? WHERE Id_Mustahik = ?';
-
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Id_Mustahik, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query update
-            koneksi.query(queryUpdate, [Id_Penerima ,Nama,Alamat,Jenis_Kelamin,Golongan,Usia,Jumlah_Beras,Tanggal_Terima, req.params.Id_Mustahik], (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika update berhasil
-                res.status(200).json({ success: true, message: 'Berhasil update data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
+    koneksi.query(queryUpdate, [Id_Penerima, Nama, Alamat, Jenis_Kelamin, Golongan, Usia, Jumlah_Beras, Tanggal_Terima, req.params.Id_Mustahik], (err) => {
+      if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+      res.status(200).json({ success: true, message: 'Berhasil update data!' });
     });
+  });
 });
 
-// delete data
 app.delete('/api/tbl_penerimaan/:Id_Mustahik', (req, res) => {
-    // buat query sql untuk mencari data dan hapus
-    const querySearch = 'SELECT * FROM tbl_penerimaan WHERE Id_Mustahik = ?';
-    const queryDelete = 'DELETE FROM tbl_penerimaan WHERE Id_Mustahik = ?';
+  const querySearch = 'SELECT * FROM tbl_penerimaan WHERE Id_Mustahik = ?';
+  const queryDelete = 'DELETE FROM tbl_penerimaan WHERE Id_Mustahik = ?';
 
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Id_Mustahik, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
+  koneksi.query(querySearch, [req.params.Id_Mustahik], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    if (!rows.length) return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
 
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query delete
-            koneksi.query(queryDelete, req.params.Id_Mustahik, (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika delete berhasil
-                res.status(200).json({ success: true, message: 'Berhasil hapus data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
+    koneksi.query(queryDelete, [req.params.Id_Mustahik], (err) => {
+      if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+      res.status(200).json({ success: true, message: 'Berhasil hapus data!' });
     });
+  });
 });
 
-// tbl_login
-// create data / insert data
-app.post('/api/tbl_login',upload.single('image'),(req, res) => {
+// ---------- TBL_LOGIN ---------- //
+app.post('/api/tbl_login', upload.single('image'), (req, res) => {
+  const { Email, Password } = req.body;
+  const query = 'INSERT INTO tbl_login (Email, Password) VALUES (?, ?)';
 
-    const data = { ...req.body };
-    const Email   = req.body.Email;
-    const Password = req.body.Password;
-
-    if (!req.file) {
-        console.log("No file upload");
-        const querySql = 'INSERT INTO tbl_login (Email ,Password) values (?,?);';
-         
-        // jalankan query
-        koneksi.query(querySql,[ Email ,Password], (err, rows, field) => {
-            // error handling
-            if (err) {
-                return res.status(500).json({ message: 'Gagal insert data!', error: err });
-            }
-       
-            // jika request berhasil
-            res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-        });
-    } else {
-        console.log(req.file.filename)
-        var imgsrc = 'http://localhost:5000/images/' + req.file.filename;
-        const foto =   imgsrc;
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySql = 'INSERT INTO tbl_login (Email ,Password) values (?,?);';
- 
-// jalankan query
-koneksi.query(querySql,[ Email ,Password], (err, rows, field) => {
-    // error handling
-    if (err) {
-        return res.status(500).json({ message: 'Gagal insert data!', error: err });
-    }
-
-    // jika request berhasil
+  koneksi.query(query, [Email, Password], (err) => {
+    if (err) return res.status(500).json({ message: 'Gagal insert data!', error: err });
     res.status(201).json({ success: true, message: 'Berhasil insert data!' });
-});
-}
+  });
 });
 
-// read data / get data
 app.get('/api/tbl_login', (req, res) => {
-    // buat query sql
-    const querySql = 'SELECT * FROM tbl_login';
-
-    // jalankan query
-    koneksi.query(querySql, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika request berhasil
-        res.status(200).json({ success: true, data: rows });
-    });
+  koneksi.query('SELECT * FROM tbl_login', (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    res.status(200).json({ success: true, data: rows });
+  });
 });
 
-// update data
 app.put('/api/tbl_login/:Email', (req, res) => {
-    // buat variabel penampung data dan query sql
-    const data = { ...req.body };
-    const querySearch = 'SELECT * FROM tbl_login WHERE Email = ?';
-    const Email = req.body.Email;
-    const Password   = req.body.Password;
+  const { Password } = req.body;
+  const querySearch = 'SELECT * FROM tbl_login WHERE Email = ?';
+  const queryUpdate = 'UPDATE tbl_login SET Password = ? WHERE Email = ?';
 
+  koneksi.query(querySearch, [req.params.Email], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    if (!rows.length) return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
 
-
-    const queryUpdate = 'UPDATE tbl_login SET Password=? WHERE Email = ?';
-
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Email, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
-
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query update
-            koneksi.query(queryUpdate, [Password, req.params.Email], (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika update berhasil
-                res.status(200).json({ success: true, message: 'Berhasil update data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
+    koneksi.query(queryUpdate, [Password, req.params.Email], (err) => {
+      if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+      res.status(200).json({ success: true, message: 'Berhasil update data!' });
     });
+  });
 });
 
-// delete data
 app.delete('/api/tbl_login/:Email', (req, res) => {
-    // buat query sql untuk mencari data dan hapus
-    const querySearch = 'SELECT * FROM tbl_login WHERE Email = ?';
-    const queryDelete = 'DELETE FROM tbl_login WHERE Email = ?';
+  const querySearch = 'SELECT * FROM tbl_login WHERE Email = ?';
+  const queryDelete = 'DELETE FROM tbl_login WHERE Email = ?';
 
-    // jalankan query untuk melakukan pencarian data
-    koneksi.query(querySearch, req.params.Email, (err, rows, field) => {
-        // error handling
-        if (err) {
-            return res.status(500).json({ message: 'Ada kesalahan', error: err });
-        }
+  koneksi.query(querySearch, [req.params.Email], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+    if (!rows.length) return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
 
-        // jika id yang dimasukkan sesuai dengan data yang ada di db
-        if (rows.length) {
-            // jalankan query delete
-            koneksi.query(queryDelete, req.params.Email, (err, rows, field) => {
-                // error handling
-                if (err) {
-                    return res.status(500).json({ message: 'Ada kesalahan', error: err });
-                }
-
-                // jika delete berhasil
-                res.status(200).json({ success: true, message: 'Berhasil hapus data!' });
-            });
-        } else {
-            return res.status(404).json({ message: 'Data tidak ditemukan!', success: false });
-        }
+    koneksi.query(queryDelete, [req.params.Email], (err) => {
+      if (err) return res.status(500).json({ message: 'Ada kesalahan', error: err });
+      res.status(200).json({ success: true, message: 'Berhasil hapus data!' });
     });
+  });
 });
 
-const authRoutes = require("./routes/auth");
+// Auth routes
 app.use("/api", authRoutes);
 
-// buat server nya
+// Start server
 app.listen(PORT, () => console.log(`Server running at port: ${PORT}`));
